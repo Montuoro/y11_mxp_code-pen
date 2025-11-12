@@ -215,28 +215,34 @@ class Year11AnalysisApp:
         self.run_date_combo = ttk.Combobox(main_frame, width=30, state='readonly')
         self.run_date_combo.grid(row=4, column=1, sticky=tk.W, padx=(10, 0), pady=5)
 
+        # Chart title
+        ttk.Label(main_frame, text="Chart Title:").grid(row=5, column=0, sticky=tk.W, pady=5)
+        self.chart_title_entry = ttk.Entry(main_frame, width=50)
+        self.chart_title_entry.grid(row=5, column=1, padx=(10, 0), pady=5)
+        self.chart_title_entry.insert(0, "Year 11 Performance Analysis")
+
         # Output folder
-        ttk.Label(main_frame, text="Output Folder:").grid(row=5, column=0, sticky=tk.W, pady=5)
+        ttk.Label(main_frame, text="Output Folder:").grid(row=6, column=0, sticky=tk.W, pady=5)
         self.output_entry = ttk.Entry(main_frame, width=50)
-        self.output_entry.grid(row=5, column=1, padx=(10, 0), pady=5)
+        self.output_entry.grid(row=6, column=1, padx=(10, 0), pady=5)
         self.output_entry.insert(0, r"C:\Data Projects\python\y11_mxp_code-pen")
         
         # Buttons
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=6, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=7, column=0, columnspan=2, pady=20)
 
         ttk.Button(button_frame, text="🔍 Fetch Data", command=self.fetch_data).grid(row=0, column=0, padx=5)
         ttk.Button(button_frame, text="📈 Run Analysis", command=self.run_analysis).grid(row=0, column=1, padx=5)
         ttk.Button(button_frame, text="💾 Generate CodePen Files", command=self.generate_codepen).grid(row=0, column=2, padx=5)
 
         # Progress/Status area
-        ttk.Label(main_frame, text="Status:").grid(row=7, column=0, sticky=tk.W, pady=(10, 5))
+        ttk.Label(main_frame, text="Status:").grid(row=8, column=0, sticky=tk.W, pady=(10, 5))
         self.status_text = scrolledtext.ScrolledText(main_frame, height=15, width=100)
-        self.status_text.grid(row=8, column=0, columnspan=2, pady=5)
+        self.status_text.grid(row=9, column=0, columnspan=2, pady=5)
 
         # Statistics display
         self.stats_frame = ttk.LabelFrame(main_frame, text="Model Statistics", padding="10")
-        self.stats_frame.grid(row=9, column=0, columnspan=2, pady=10, sticky=(tk.W, tk.E))
+        self.stats_frame.grid(row=10, column=0, columnspan=2, pady=10, sticky=(tk.W, tk.E))
         
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
@@ -627,14 +633,17 @@ class Year11AnalysisApp:
             # Get unique courses for dropdown
             unique_courses = sorted(self.df['course'].unique().tolist())
 
+            # Get chart title
+            chart_title = self.chart_title_entry.get() or "Performance Analysis"
+
             # Generate JavaScript file
-            js_content = self.generate_js_content(data_for_js, course_means_data, unique_courses)
+            js_content = self.generate_js_content(data_for_js, course_means_data, unique_courses, chart_title)
 
             # Generate CSS file
             css_content = self.generate_css_content()
 
             # Generate HTML file
-            html_content = self.generate_html_content()
+            html_content = self.generate_html_content(chart_title)
 
             # Save files
             js_file = os.path.join(output_folder, "viz.js")
@@ -661,7 +670,7 @@ class Year11AnalysisApp:
             self.log_message(f"Error generating CodePen files: {str(e)}")
             messagebox.showerror("Generation Error", f"Could not generate files: {str(e)}")
     
-    def generate_js_content(self, data, course_means, courses):
+    def generate_js_content(self, data, course_means, courses, chart_title):
         """Generate JavaScript content for visualization."""
         js_template = """// Performance Analysis Visualization for {school_name}
 // Generated on {date}
@@ -669,9 +678,12 @@ class Year11AnalysisApp:
 const rawData = {data_json};
 const courseMeans = {means_json};
 const allCourses = {courses_json};
+const allStudents = {students_json};
+const chartTitle = {chart_title_json};
 
 let currentView = 'individual';
 let selectedCourse = null;
+let selectedStudent = null;
 
 // Calculate statistics
 function calculateStats(data) {{
@@ -712,14 +724,14 @@ function createIndividualPlot() {{
         y: rawData.map(d => d.actual),
         mode: 'markers',
         type: 'scatter',
-        text: rawData.map(d => `${{d.student_name}}<br>${{d.course}}<br>Expected: ${{d.expected}}<br>Actual: ${{d.actual}}`),
+        text: rawData.map(d => `${{d.student_name}}<br>${{d.course}}<br>Expected: ${{d.expected}}<br>Forecasted: ${{d.actual}}`),
         hoverinfo: 'text',
         marker: {{
             size: 8,
             color: rawData.map(d => d.actual - d.expected),
             colorscale: 'RdYlGn',
             colorbar: {{
-                title: 'Difference<br>(Actual - Expected)',
+                title: 'Difference<br>(Forecasted - Expected)',
                 thickness: 20
             }},
             showscale: true
@@ -745,13 +757,13 @@ function createIndividualPlot() {{
     }};
 
     const layout = {{
-        title: 'Individual Student Performance: Expected vs Actual',
+        title: chartTitle + ': All Students',
         xaxis: {{
             title: 'Expected Score',
             range: [minVal - 5, maxVal + 5]
         }},
         yaxis: {{
-            title: 'Actual Score',
+            title: 'Forecasted',
             range: [minVal - 5, maxVal + 5]
         }},
         hovermode: 'closest',
@@ -774,14 +786,14 @@ function createMeansPlot() {{
         textfont: {{
             size: 10
         }},
-        hovertext: courseMeans.map(d => `${{d.course}}<br>Mean Expected: ${{d.expected.toFixed(2)}}<br>Mean Actual: ${{d.actual.toFixed(2)}}`),
+        hovertext: courseMeans.map(d => `${{d.course}}<br>Mean Expected: ${{d.expected.toFixed(2)}}<br>Mean Forecasted: ${{d.actual.toFixed(2)}}`),
         hoverinfo: 'text',
         marker: {{
             size: 12,
             color: courseMeans.map(d => d.actual - d.expected),
             colorscale: 'RdYlGn',
             colorbar: {{
-                title: 'Mean Difference<br>(Actual - Expected)',
+                title: 'Mean Difference<br>(Forecasted - Expected)',
                 thickness: 20
             }},
             showscale: true
@@ -806,13 +818,13 @@ function createMeansPlot() {{
     }};
 
     const layout = {{
-        title: 'Course Average Performance: Expected vs Actual',
+        title: chartTitle + ': Course Averages',
         xaxis: {{
             title: 'Mean Expected Score',
             range: [minVal - 5, maxVal + 5]
         }},
         yaxis: {{
-            title: 'Mean Actual Score',
+            title: 'Mean Forecasted',
             range: [minVal - 5, maxVal + 5]
         }},
         hovermode: 'closest',
@@ -852,7 +864,7 @@ function createCoursePlot(course) {{
         y: backgroundData.map(d => d.actual),
         mode: 'markers',
         type: 'scatter',
-        text: backgroundData.map(d => `${{d.student_name}}<br>${{d.course}}<br>Expected: ${{d.expected}}<br>Actual: ${{d.actual}}`),
+        text: backgroundData.map(d => `${{d.student_name}}<br>${{d.course}}<br>Expected: ${{d.expected}}<br>Forecasted: ${{d.actual}}`),
         hoverinfo: 'text',
         marker: {{
             size: 8.4,
@@ -871,14 +883,14 @@ function createCoursePlot(course) {{
         y: courseData.map(d => d.actual),
         mode: 'markers',
         type: 'scatter',
-        text: courseData.map(d => `${{d.student_name}}<br>${{d.course}}<br>Expected: ${{d.expected}}<br>Actual: ${{d.actual}}`),
+        text: courseData.map(d => `${{d.student_name}}<br>${{d.course}}<br>Expected: ${{d.expected}}<br>Forecasted: ${{d.actual}}`),
         hoverinfo: 'text',
         marker: {{
             size: 10,
             color: courseData.map(d => d.actual - d.expected),
             colorscale: 'RdYlGn',
             colorbar: {{
-                title: 'Difference<br>(Actual - Expected)',
+                title: 'Difference<br>(Forecasted - Expected)',
                 thickness: 20
             }},
             showscale: true,
@@ -928,13 +940,13 @@ function createCoursePlot(course) {{
     }};
 
     const layout = {{
-        title: `Course Drill-Down: ${{course}}`,
+        title: chartTitle + `: ${{course}}`,
         xaxis: {{
             title: 'Expected Score',
             range: [minVal - 5, maxVal + 5]
         }},
         yaxis: {{
-            title: 'Actual Score',
+            title: 'Forecasted',
             range: [minVal - 5, maxVal + 5]
         }},
         hovermode: 'closest',
@@ -943,6 +955,92 @@ function createCoursePlot(course) {{
     }};
 
     Plotly.newPlot('plot', [bgTrace, courseTrace, regressionTrace, line], layout);
+}}
+
+// Create student drill-down plot
+function createStudentPlot(studentName) {{
+    // Filter data for selected student
+    const studentData = rawData.filter(d => d.student_name === studentName);
+    const backgroundData = rawData.filter(d => d.student_name !== studentName);
+
+    // Background trace (greyed out) - 40% larger
+    const bgTrace = {{
+        x: backgroundData.map(d => d.expected),
+        y: backgroundData.map(d => d.actual),
+        mode: 'markers',
+        type: 'scatter',
+        text: backgroundData.map(d => `${{d.student_name}}<br>${{d.course}}<br>Expected: ${{d.expected}}<br>Forecasted: ${{d.actual}}`),
+        hoverinfo: 'text',
+        marker: {{
+            size: 8.4,
+            color: 'rgba(200, 200, 200, 0.3)',
+            line: {{
+                color: 'rgba(150, 150, 150, 0.3)',
+                width: 1
+            }}
+        }},
+        showlegend: false
+    }};
+
+    // Student-specific trace (highlighted)
+    const studentTrace = {{
+        x: studentData.map(d => d.expected),
+        y: studentData.map(d => d.actual),
+        mode: 'markers',
+        type: 'scatter',
+        text: studentData.map(d => `${{d.student_name}}<br>${{d.course}}<br>Expected: ${{d.expected}}<br>Forecasted: ${{d.actual}}`),
+        hoverinfo: 'text',
+        marker: {{
+            size: 12,
+            color: studentData.map(d => d.actual - d.expected),
+            colorscale: 'RdYlGn',
+            colorbar: {{
+                title: 'Difference<br>(Forecasted - Expected)',
+                thickness: 20
+            }},
+            showscale: true,
+            line: {{
+                color: 'rgba(0, 0, 0, 0.8)',
+                width: 2
+            }}
+        }},
+        showlegend: false
+    }};
+
+    // Add perfect correlation line
+    const minVal = Math.min(...rawData.map(d => Math.min(d.expected, d.actual)));
+    const maxVal = Math.max(...rawData.map(d => Math.max(d.expected, d.actual)));
+
+    const line = {{
+        x: [minVal, maxVal],
+        y: [minVal, maxVal],
+        mode: 'lines',
+        type: 'scatter',
+        line: {{
+            color: 'rgba(255, 0, 0, 0.5)',
+            width: 2,
+            dash: 'dash'
+        }},
+        hoverinfo: 'skip',
+        showlegend: false
+    }};
+
+    const layout = {{
+        title: chartTitle + `: ${{studentName}}`,
+        xaxis: {{
+            title: 'Expected Score',
+            range: [minVal - 5, maxVal + 5]
+        }},
+        yaxis: {{
+            title: 'Forecasted',
+            range: [minVal - 5, maxVal + 5]
+        }},
+        hovermode: 'closest',
+        height: 600,
+        showlegend: false
+    }};
+
+    Plotly.newPlot('plot', [bgTrace, studentTrace, line], layout);
 }}
 
 // Update statistics display
@@ -954,6 +1052,8 @@ function updateStats() {{
         statsData = courseMeans;
     }} else if (currentView === 'course' && selectedCourse) {{
         statsData = rawData.filter(d => d.course === selectedCourse);
+    }} else if (currentView === 'student' && selectedStudent) {{
+        statsData = rawData.filter(d => d.student_name === selectedStudent);
     }}
 
     const stats = calculateStats(statsData);
@@ -979,6 +1079,20 @@ document.addEventListener('DOMContentLoaded', function() {{
         selectedCourse = allCourses[0];
     }}
 
+    // Populate student dropdown
+    const studentDropdown = document.getElementById('student-dropdown');
+    allStudents.forEach(student => {{
+        const option = document.createElement('option');
+        option.value = student;
+        option.textContent = student;
+        studentDropdown.appendChild(option);
+    }});
+
+    // Set initial selected student
+    if (allStudents.length > 0) {{
+        selectedStudent = allStudents[0];
+    }}
+
     // Create initial plot
     createIndividualPlot();
     updateStats();
@@ -988,6 +1102,7 @@ document.addEventListener('DOMContentLoaded', function() {{
         document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
         this.classList.add('active');
         document.getElementById('course-selector').style.display = 'none';
+        document.getElementById('student-selector').style.display = 'none';
         currentView = 'individual';
         createIndividualPlot();
         updateStats();
@@ -997,6 +1112,7 @@ document.addEventListener('DOMContentLoaded', function() {{
         document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
         this.classList.add('active');
         document.getElementById('course-selector').style.display = 'none';
+        document.getElementById('student-selector').style.display = 'none';
         currentView = 'means';
         createMeansPlot();
         updateStats();
@@ -1006,8 +1122,19 @@ document.addEventListener('DOMContentLoaded', function() {{
         document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
         this.classList.add('active');
         document.getElementById('course-selector').style.display = 'block';
+        document.getElementById('student-selector').style.display = 'none';
         currentView = 'course';
         createCoursePlot(selectedCourse);
+        updateStats();
+    }});
+
+    document.getElementById('btn-student').addEventListener('click', function() {{
+        document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+        this.classList.add('active');
+        document.getElementById('course-selector').style.display = 'none';
+        document.getElementById('student-selector').style.display = 'block';
+        currentView = 'student';
+        createStudentPlot(selectedStudent);
         updateStats();
     }});
 
@@ -1019,14 +1146,28 @@ document.addEventListener('DOMContentLoaded', function() {{
             updateStats();
         }}
     }});
+
+    // Add student dropdown change listener
+    studentDropdown.addEventListener('change', function() {{
+        selectedStudent = this.value;
+        if (currentView === 'student') {{
+            createStudentPlot(selectedStudent);
+            updateStats();
+        }}
+    }});
 }});"""
+
+        # Get unique students sorted alphabetically
+        unique_students = sorted(list(set([d['student_name'] for d in data])))
 
         return js_template.format(
             school_name=self.school_name,
             date=datetime.now().strftime('%Y-%m-%d'),
             data_json=json.dumps(data),
             means_json=json.dumps(course_means),
-            courses_json=json.dumps(courses)
+            courses_json=json.dumps(courses),
+            students_json=json.dumps(unique_students),
+            chart_title_json=json.dumps(chart_title)
         )
     
     def generate_css_content(self):
@@ -1086,7 +1227,7 @@ h1 {
   color: white;
 }
 
-#course-selector {
+#course-selector, #student-selector {
   text-align: center;
   margin-bottom: 20px;
   padding: 15px;
@@ -1094,13 +1235,13 @@ h1 {
   border-radius: 8px;
 }
 
-#course-selector label {
+#course-selector label, #student-selector label {
   font-weight: bold;
   margin-right: 10px;
   color: #333;
 }
 
-#course-dropdown {
+#course-dropdown, #student-dropdown {
   padding: 8px 15px;
   border: 2px solid #667eea;
   border-radius: 5px;
@@ -1110,7 +1251,7 @@ h1 {
   min-width: 300px;
 }
 
-#course-dropdown:focus {
+#course-dropdown:focus, #student-dropdown:focus {
   outline: none;
   border-color: #764ba2;
   box-shadow: 0 0 5px rgba(102, 126, 234, 0.5);
@@ -1147,30 +1288,36 @@ h1 {
   font-weight: bold;
 }"""
     
-    def generate_html_content(self):
+    def generate_html_content(self, chart_title):
         """Generate HTML content for visualization."""
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{self.school_name} - Performance Analysis</title>
+    <title>{self.school_name} - {chart_title}</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <h1>📊 {self.school_name} Performance Analysis</h1>
-        <div class="subtitle">Expected vs Actual Scores Across All Subjects</div>
+        <h1>📊 {chart_title}</h1>
+        <div class="subtitle">Expected vs Forecasted Scores Across All Subjects</div>
 
         <div class="view-controls">
             <button class="view-btn active" id="btn-individual">All Students</button>
             <button class="view-btn" id="btn-means">Course Averages</button>
             <button class="view-btn" id="btn-course">Course Drill-Down</button>
+            <button class="view-btn" id="btn-student">Student View</button>
         </div>
 
         <div id="course-selector" style="display: none;">
             <label for="course-dropdown">Select Course: </label>
             <select id="course-dropdown"></select>
+        </div>
+
+        <div id="student-selector" style="display: none;">
+            <label for="student-dropdown">Select Student: </label>
+            <select id="student-dropdown"></select>
         </div>
 
         <div id="plot"></div>
