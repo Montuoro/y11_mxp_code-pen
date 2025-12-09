@@ -109,50 +109,57 @@ def categorize_subject(course_name):
     else:
         return 'Creative'
 
-def create_interaction_features(df):
+def create_interaction_features(df, data_source='AAS'):
     """Create interaction terms between Year 10 scores and subject categories."""
-    
+
     # Create binary columns for each category
     for category in ['Maths', 'Science', 'Humanities', 'Language', 'Creative']:
         df[f'is_{category}'] = (df['category'] == category).astype(int)
-    
+
+    # Determine base features based on data source
+    if data_source == 'AAS':
+        base_features = ['v', 'n', 'm', 'r', 's', 'w']
+    else:  # NAPLAN
+        base_features = ['r', 'w', 's', 'g', 'n', 'gender']
+
     # Create interaction terms
-    year10_features = ['v', 'n', 'm', 'r', 's', 'w']
-    
-    for feature in year10_features:
+    for feature in base_features:
         for category in ['Maths', 'Science', 'Humanities', 'Language', 'Creative']:
             df[f'{feature}_x_{category}'] = df[feature] * df[f'is_{category}']
-    
+
     return df
 
-def build_model(df):
+def build_model(df, data_source='AAS'):
     """Build regression model with interaction terms."""
-    
-    # Base features
-    base_features = ['v', 'n', 'm', 'r', 's', 'w']
-    
+
+    # Determine base features based on data source
+    if data_source == 'AAS':
+        base_features = ['v', 'n', 'm', 'r', 's', 'w']
+    else:  # NAPLAN
+        base_features = ['r', 'w', 's', 'g', 'n', 'gender']
+
     # Interaction features
     interaction_features = [col for col in df.columns if '_x_' in col]
-    
+
     # All features
     all_features = base_features + interaction_features
-    
+
     # Prepare data
     X = df[all_features]
     y = df['actual']
-    
+
     # Train model
     model = LinearRegression()
     model.fit(X, y)
-    
+
     # Make predictions
     predictions = model.predict(X)
-    
+
     # Calculate metrics
     r2 = r2_score(y, predictions)
     mae = mean_absolute_error(y, predictions)
     rmse = np.sqrt(np.mean((y - predictions) ** 2))
-    
+
     return model, all_features, predictions, r2, mae, rmse
 
 # =============================================================================
@@ -168,6 +175,7 @@ class Year11AnalysisApp:
         # Data storage
         self.df = None
         self.school_name = ""
+        self.data_source = None  # Track whether we used 'AAS' or 'NAPLAN'
 
         # Set up GUI
         self.setup_gui()
@@ -192,6 +200,9 @@ class Year11AnalysisApp:
         self.school_combo = ttk.Combobox(main_frame, width=40)
         self.school_combo.grid(row=1, column=1, padx=(10, 0), pady=5)
         self.school_combo.bind('<<ComboboxSelected>>', self.load_year_levels)
+
+        # Refresh button for schools
+        ttk.Button(main_frame, text="🔄 Refresh", command=self.load_schools).grid(row=1, column=2, padx=(5, 0), pady=5)
         
         # Year selection
         ttk.Label(main_frame, text="Year 11 Cohort Year:").grid(row=2, column=0, sticky=tk.W, pady=5)
@@ -265,10 +276,10 @@ class Year11AnalysisApp:
                 f"UID={DB_CONFIG['USERNAME']};"
                 f"PWD={DB_CONFIG['PASSWORD']}"
             )
-            
+
             conn = pyodbc.connect(conn_str)
             cursor = conn.cursor()
-            
+
             # Get unique schools
             # First, check what columns exist in the RunResult table
             column_check_query = """
@@ -319,7 +330,7 @@ class Year11AnalysisApp:
             conn.close()
 
             self.log_message(f"Loaded {len(school_list)} schools from database")
-            
+
         except Exception as e:
             self.log_message(f"Error loading schools: {str(e)}")
             messagebox.showerror("Database Error", f"Could not load schools: {str(e)}")
@@ -468,11 +479,11 @@ class Year11AnalysisApp:
             else:
                 # Fallback in case format is unexpected
                 run_id = int(run_date_selection)
-            
+
             self.log_message(f"Fetching data for {self.school_name} (ID: {school_id})")
             self.log_message(f"Study Year: {year_level}, Run: {run_date_selection}")
             self.log_message(f"Year 11 Cohort: {year_11_cohort} (DB Calendar Year: {db_calendar_year})")
-            
+
             # Connect to database
             conn_str = (
                 f"DRIVER={{ODBC Driver 17 for SQL Server}};"
@@ -481,12 +492,13 @@ class Year11AnalysisApp:
                 f"UID={DB_CONFIG['USERNAME']};"
                 f"PWD={DB_CONFIG['PASSWORD']}"
             )
-            
+
             conn = pyodbc.connect(conn_str)
-            
-            # Build and execute query
-            query = f"""
-                SELECT 
+
+            # Try AasResult first
+            self.log_message("Attempting to fetch from AasResult...")
+            query_aas = f"""
+                SELECT
                     rr.StudentName AS student_name,
                     rr.StudentId AS student_number,
                     rr.SubjectName AS course,
@@ -507,10 +519,10 @@ class Year11AnalysisApp:
                         REPLACE(UPPER(rr.StudentName), ' ', '') COLLATE Latin1_General_CI_AS = REPLACE(UPPER(ar.Name), ' ', '') COLLATE Latin1_General_CI_AS
                         OR
                         (
-                            UPPER(LEFT(rr.StudentName, CHARINDEX(' ', rr.StudentName) - 1)) COLLATE Latin1_General_CI_AS = 
+                            UPPER(LEFT(rr.StudentName, CHARINDEX(' ', rr.StudentName) - 1)) COLLATE Latin1_General_CI_AS =
                             UPPER(LEFT(ar.Name, CHARINDEX(' ', ar.Name) - 1)) COLLATE Latin1_General_CI_AS
                             AND
-                            UPPER(SUBSTRING(rr.StudentName, CHARINDEX(' ', rr.StudentName) + 1, 4)) COLLATE Latin1_General_CI_AS = 
+                            UPPER(SUBSTRING(rr.StudentName, CHARINDEX(' ', rr.StudentName) + 1, 4)) COLLATE Latin1_General_CI_AS =
                             UPPER(SUBSTRING(ar.Name, CHARINDEX(' ', ar.Name) + 1, 4)) COLLATE Latin1_General_CI_AS
                         )
                     )
@@ -519,13 +531,117 @@ class Year11AnalysisApp:
                     AND rr.Prediction IS NOT NULL
                 ORDER BY student_name, course
             """
-            
-            self.df = pd.read_sql_query(query, conn)
+
+            try:
+                self.df = pd.read_sql_query(query_aas, conn)
+
+                if len(self.df) > 0:
+                    self.data_source = 'AAS'
+                    self.log_message(f"✓ Successfully fetched from AasResult")
+                    self.log_message(f"Fetched {len(self.df)} records for {self.df['student_name'].nunique()} students")
+                    self.log_message(f"Courses: {self.df['course'].nunique()}")
+                else:
+                    # No data from AasResult, try NplResult
+                    self.log_message("No data found in AasResult, trying NplResult (NAPLAN)...")
+
+                    query_npl = f"""
+                        SELECT
+                            rr.StudentName AS student_name,
+                            rr.StudentId AS student_number,
+                            rr.SubjectName AS course,
+                            nr.Reading AS r,
+                            nr.Writing AS w,
+                            nr.Spelling AS s,
+                            nr.Grammar AS g,
+                            nr.Numeracy AS n,
+                            CASE WHEN nr.Gender = 'M' THEN 0 ELSE 1 END AS gender,
+                            rr.Prediction AS actual
+                        FROM Forecast.dbo.RunResult rr
+                        INNER JOIN Psam.dbo.NplResult nr
+                            ON nr.SchoolId = {school_id}
+                            AND nr.CalendarYear = {db_calendar_year}
+                            AND (
+                                UPPER(rr.StudentName) COLLATE Latin1_General_CI_AS = UPPER(nr.Name) COLLATE Latin1_General_CI_AS
+                                OR
+                                REPLACE(UPPER(rr.StudentName), ' ', '') COLLATE Latin1_General_CI_AS = REPLACE(UPPER(nr.Name), ' ', '') COLLATE Latin1_General_CI_AS
+                                OR
+                                (
+                                    UPPER(LEFT(rr.StudentName, CHARINDEX(' ', rr.StudentName) - 1)) COLLATE Latin1_General_CI_AS =
+                                    UPPER(LEFT(nr.Name, CHARINDEX(' ', nr.Name) - 1)) COLLATE Latin1_General_CI_AS
+                                    AND
+                                    UPPER(SUBSTRING(rr.StudentName, CHARINDEX(' ', rr.StudentName) + 1, 4)) COLLATE Latin1_General_CI_AS =
+                                    UPPER(SUBSTRING(nr.Name, CHARINDEX(' ', nr.Name) + 1, 4)) COLLATE Latin1_General_CI_AS
+                                )
+                            )
+                        WHERE rr.RunId = {run_id}
+                            AND rr.SchoolId = {school_id}
+                            AND rr.Prediction IS NOT NULL
+                        ORDER BY student_name, course
+                    """
+
+                    self.df = pd.read_sql_query(query_npl, conn)
+
+                    if len(self.df) > 0:
+                        self.data_source = 'NAPLAN'
+                        self.log_message(f"✓ Successfully fetched from NplResult (NAPLAN)")
+                        self.log_message(f"Fetched {len(self.df)} records for {self.df['student_name'].nunique()} students")
+                        self.log_message(f"Courses: {self.df['course'].nunique()}")
+                    else:
+                        self.log_message("⚠ No data found in either AasResult or NplResult")
+                        messagebox.showwarning("No Data", "No student data found in AasResult or NplResult for this school and year.")
+
+            except Exception as query_error:
+                self.log_message(f"Error with AasResult query, trying NplResult: {str(query_error)}")
+
+                # Try NplResult as backup
+                query_npl = f"""
+                    SELECT
+                        rr.StudentName AS student_name,
+                        rr.StudentId AS student_number,
+                        rr.SubjectName AS course,
+                        nr.Reading AS r,
+                        nr.Writing AS w,
+                        nr.Spelling AS s,
+                        nr.Grammar AS g,
+                        nr.Numeracy AS n,
+                        CASE WHEN nr.Gender = 'M' THEN 0 ELSE 1 END AS gender,
+                        rr.Prediction AS actual
+                    FROM Forecast.dbo.RunResult rr
+                    INNER JOIN Psam.dbo.NplResult nr
+                        ON nr.SchoolId = {school_id}
+                        AND nr.CalendarYear = {db_calendar_year}
+                        AND (
+                            UPPER(rr.StudentName) COLLATE Latin1_General_CI_AS = UPPER(nr.Name) COLLATE Latin1_General_CI_AS
+                            OR
+                            REPLACE(UPPER(rr.StudentName), ' ', '') COLLATE Latin1_General_CI_AS = REPLACE(UPPER(nr.Name), ' ', '') COLLATE Latin1_General_CI_AS
+                            OR
+                            (
+                                UPPER(LEFT(rr.StudentName, CHARINDEX(' ', rr.StudentName) - 1)) COLLATE Latin1_General_CI_AS =
+                                UPPER(LEFT(nr.Name, CHARINDEX(' ', nr.Name) - 1)) COLLATE Latin1_General_CI_AS
+                                AND
+                                UPPER(SUBSTRING(rr.StudentName, CHARINDEX(' ', rr.StudentName) + 1, 4)) COLLATE Latin1_General_CI_AS =
+                                UPPER(SUBSTRING(nr.Name, CHARINDEX(' ', nr.Name) + 1, 4)) COLLATE Latin1_General_CI_AS
+                            )
+                        )
+                    WHERE rr.RunId = {run_id}
+                        AND rr.SchoolId = {school_id}
+                        AND rr.Prediction IS NOT NULL
+                    ORDER BY student_name, course
+                """
+
+                self.df = pd.read_sql_query(query_npl, conn)
+
+                if len(self.df) > 0:
+                    self.data_source = 'NAPLAN'
+                    self.log_message(f"✓ Successfully fetched from NplResult (NAPLAN)")
+                    self.log_message(f"Fetched {len(self.df)} records for {self.df['student_name'].nunique()} students")
+                    self.log_message(f"Courses: {self.df['course'].nunique()}")
+                else:
+                    self.log_message("⚠ No data found in NplResult either")
+                    messagebox.showwarning("No Data", "No student data found in either AasResult or NplResult for this school and year.")
+
             conn.close()
-            
-            self.log_message(f"Fetched {len(self.df)} records for {self.df['student_name'].nunique()} students")
-            self.log_message(f"Courses: {self.df['course'].nunique()}")
-            
+
         except Exception as e:
             self.log_message(f"Error fetching data: {str(e)}")
             messagebox.showerror("Database Error", f"Could not fetch data: {str(e)}")
@@ -537,7 +653,7 @@ class Year11AnalysisApp:
             return
 
         try:
-            self.log_message("Starting regression analysis...")
+            self.log_message(f"Starting regression analysis using {self.data_source} data...")
 
             # Categorize subjects
             self.df['category'] = self.df['course'].apply(categorize_subject)
@@ -549,10 +665,10 @@ class Year11AnalysisApp:
                 self.log_message(f"  {cat}: {count}")
 
             # Create interaction features
-            self.df = create_interaction_features(self.df)
+            self.df = create_interaction_features(self.df, data_source=self.data_source)
 
             # Build model
-            model, features, predictions, r2, mae, rmse = build_model(self.df)
+            model, features, predictions, r2, mae, rmse = build_model(self.df, data_source=self.data_source)
 
             # Add predictions to dataframe
             self.df['expected'] = predictions
