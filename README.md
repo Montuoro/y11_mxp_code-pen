@@ -7,7 +7,7 @@ A comprehensive tool for analyzing Year 11 student performance by comparing expe
 - Fetches student data from SQL Server database
 - Performs regression analysis with interaction terms across subject categories
 - Categorizes subjects into: Maths, Science, Humanities, Language, and Creative
-- Generates interactive CodePen visualizations with Plotly
+- Generates standalone interactive HTML visualizations with Plotly
 - Exports results to Excel spreadsheets
 
 ## Requirements
@@ -52,24 +52,24 @@ python app.py
 
 6. **Run Analysis**: Click "Run Analysis" to perform regression analysis and generate predictions
 
-7. **Generate CodePen Files**: Click "Generate CodePen Files" to create HTML/CSS/JS visualization files
+7. **Generate Visualization**: Click "Generate Visualization" to create a standalone HTML file
 
 ### Outputs
 
-The tool generates the following files:
+The tool generates the following files in a timestamped folder:
 
-- `[SchoolName]_predictions.xlsx` - Complete results with expected, actual, and residual scores
-- `[SchoolName]_viz.html` - Interactive visualization HTML file
-- `[SchoolName]_viz.css` - Styling for the visualization
-- `[SchoolName]_viz.js` - JavaScript with data and plotting logic
+- `predictions.xlsx` - Complete results with expected, actual, and residual scores
+- `visualization.html` - Self-contained interactive visualization (single file, no external dependencies except Plotly CDN)
 
 ### Visualization
 
-Open the generated HTML file in a web browser to view:
-- Individual student performance scatter plot
-- Course average performance comparison
+Open the generated `visualization.html` file in any web browser to view:
+- **All Students View**: Individual student performance scatter plot across all courses
+- **Course Averages View**: Aggregate performance by course
+- **Course Drill-Down View**: Focus on a specific course with regression line
+- **Student View**: Individual student's performance across all their courses
 - Interactive tooltips with detailed information
-- Statistical metrics (R², correlation, mean difference)
+- Real-time statistical metrics (R², correlation, mean difference)
 
 ## Database Configuration
 
