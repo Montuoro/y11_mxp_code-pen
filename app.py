@@ -1,6 +1,6 @@
 """
 Year 11 Performance Analysis Tool
-Fetches data from SQL Server, runs regression analysis, and generates CodePen visualizations
+Fetches data from SQL Server, runs regression analysis, and generates standalone HTML visualizations
 """
 
 import tkinter as tk
@@ -232,28 +232,22 @@ class Year11AnalysisApp:
         self.chart_title_entry.grid(row=5, column=1, padx=(10, 0), pady=5)
         self.chart_title_entry.insert(0, "Year 11 Performance Analysis")
 
-        # Output folder
-        ttk.Label(main_frame, text="Output Folder:").grid(row=6, column=0, sticky=tk.W, pady=5)
-        self.output_entry = ttk.Entry(main_frame, width=50)
-        self.output_entry.grid(row=6, column=1, padx=(10, 0), pady=5)
-        self.output_entry.insert(0, r"C:\Data Projects\python\y11_mxp_code-pen")
-        
         # Buttons
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=7, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=6, column=0, columnspan=2, pady=20)
 
         ttk.Button(button_frame, text="🔍 Fetch Data", command=self.fetch_data).grid(row=0, column=0, padx=5)
         ttk.Button(button_frame, text="📈 Run Analysis", command=self.run_analysis).grid(row=0, column=1, padx=5)
-        ttk.Button(button_frame, text="💾 Generate Visualization", command=self.generate_codepen).grid(row=0, column=2, padx=5)
+        ttk.Button(button_frame, text="💾 Generate Visualization", command=self.generate_visualization).grid(row=0, column=2, padx=5)
 
         # Progress/Status area
-        ttk.Label(main_frame, text="Status:").grid(row=8, column=0, sticky=tk.W, pady=(10, 5))
+        ttk.Label(main_frame, text="Status:").grid(row=7, column=0, sticky=tk.W, pady=(10, 5))
         self.status_text = scrolledtext.ScrolledText(main_frame, height=15, width=100)
-        self.status_text.grid(row=9, column=0, columnspan=2, pady=5)
+        self.status_text.grid(row=8, column=0, columnspan=2, pady=5)
 
         # Statistics display
         self.stats_frame = ttk.LabelFrame(main_frame, text="Model Statistics", padding="10")
-        self.stats_frame.grid(row=10, column=0, columnspan=2, pady=10, sticky=(tk.W, tk.E))
+        self.stats_frame.grid(row=9, column=0, columnspan=2, pady=10, sticky=(tk.W, tk.E))
         
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
@@ -677,14 +671,20 @@ class Year11AnalysisApp:
             # Display statistics
             self.display_statistics(r2, mae, rmse)
 
-            # Create timestamped output folder
-            base_folder = self.output_entry.get()
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            school_folder_name = f"{self.school_name.replace(' ', '_')}_{timestamp}"
-            output_folder = os.path.join(base_folder, school_folder_name)
+            # Create output folder based on chart title
+            chart_title = self.chart_title_entry.get() or "Year 11 Performance Analysis"
+
+            # Sanitize chart title for folder name
+            import re
+            safe_folder_name = re.sub(r'[<>:"/\\|?*]', '_', chart_title)
+            safe_folder_name = safe_folder_name.strip()
+
+            # Use project directory as base
+            project_dir = os.path.dirname(os.path.abspath(__file__))
+            output_folder = os.path.join(project_dir, safe_folder_name)
             os.makedirs(output_folder, exist_ok=True)
 
-            # Store output folder for use in generate_codepen
+            # Store output folder for use in generate_visualization
             self.current_output_folder = output_folder
 
             # Save full results
@@ -720,7 +720,7 @@ class Year11AnalysisApp:
         
         self.log_message(f"\nModel Performance: R² = {r2:.4f}, MAE = {mae:.2f}, RMSE = {rmse:.2f}")
     
-    def generate_codepen(self):
+    def generate_visualization(self):
         """Generate a single standalone HTML file with embedded CSS and JavaScript."""
         if self.df is None or 'expected' not in self.df.columns:
             messagebox.showwarning("No Analysis", "Please run analysis first")
@@ -781,18 +781,36 @@ class Year11AnalysisApp:
     def generate_standalone_html(self, data, course_means, courses, chart_title):
         """Generate a standalone HTML file with embedded CSS and JavaScript."""
         from datetime import datetime
+        import urllib.request
 
         # Get unique students sorted alphabetically
         unique_students = sorted(list(set([d['student_name'] for d in data])))
 
+        # Fetch Plotly library for offline use
+        try:
+            self.log_message("Fetching Plotly library for offline use...")
+            plotly_url = "https://cdn.plot.ly/plotly-2.27.0.min.js"
+            with urllib.request.urlopen(plotly_url) as response:
+                plotly_js = response.read().decode('utf-8')
+            self.log_message("✅ Plotly library fetched successfully")
+        except Exception as e:
+            self.log_message(f"⚠️ Warning: Could not fetch Plotly library: {e}")
+            self.log_message("Using CDN link instead (requires internet)")
+            plotly_js = None
+
         # Generate the complete standalone HTML
+        if plotly_js:
+            plotly_script = f"<script>{plotly_js}</script>"
+        else:
+            plotly_script = '<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>'
+
         html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{self.school_name} - {chart_title}</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    {plotly_script}
     <style>
         {self.generate_css_content()}
     </style>
